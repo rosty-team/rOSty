@@ -33,6 +33,5 @@ header_end:
 section .text
 global start
 start:
-	; affiche "OK" à l'écran
-    mov dword [0xb8000], 0x2f4b2f4f
-    hlt
+	extern kernel_main
+	call kernel_main

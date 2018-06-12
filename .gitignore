@@ -1,4 +1,6 @@
 boot.o
 /isodir/
 kernel.bin
+kernel/Cargo.lock
+/kernel/target/
 rosty.iso
