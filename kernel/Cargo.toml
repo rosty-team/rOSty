@@ -5,3 +5,9 @@ authors = ["rwilfried <wilfried.rabouin@gmail.com>"]
 
 [lib]
 crate-type = ["staticlib"]
+
+[profile.dev]
+
+# pour éviter l'erreur "Undefined reference to `_Unwind_Resume`"
+# cf. https://github.com/rust-lang/rust/issues/47493
+opt-level=1

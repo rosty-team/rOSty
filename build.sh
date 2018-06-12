@@ -8,7 +8,7 @@ xargo build --target=i386-unknown-none
 cd ..
 
 echo "Linkage"
-ld -m elf_i386 -n -o kernel.bin -T linker.ld boot.o kernel/target/i386-unknown-none/debug/libkernel.a
+ld -m elf_i386 -n -T linker.ld -o kernel.bin boot.o kernel/target/i386-unknown-none/debug/libkernel.a
 
 echo "Création ISO"
 mkdir -p isodir/boot/grub

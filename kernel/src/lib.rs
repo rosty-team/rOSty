@@ -21,14 +21,25 @@ along with rOSty.  If not, see <http://www.gnu.org/licenses/>.
 
 use core::panic::PanicInfo;
 
+#[no_mangle]
 #[lang = "eh_personality"]
-fn eh_personality() {}
+pub fn eh_personality() {}
 
+#[no_mangle]
 #[lang = "panic_impl"]
-fn panic_impl(pi: &PanicInfo) -> ! { loop {} }
+pub fn panic_impl(pi: &PanicInfo) -> ! { loop {} }
 
 #[no_mangle]
 pub fn kernel_main() {
-	// TODO
+	let s = "Hello world!";
+	let mut x = 0;
+
+	for b in s.bytes() {
+		unsafe {
+			*((0xB8000 + x * 2) as *mut u16) = 0x0F00 | (b as u16);
+		}
+		x += 1;
+	}
+
 	loop {}
 }
