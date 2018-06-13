@@ -14,9 +14,7 @@ along with rOSty.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #![allow(unused)]
-
-// https://doc.rust-lang.org/nightly/core/
-#![no_std] 
+#![no_std] // https://doc.rust-lang.org/nightly/core/
 #![feature(lang_items)]
 
 use core::panic::PanicInfo;
