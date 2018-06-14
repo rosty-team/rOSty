@@ -14,18 +14,12 @@ along with rOSty.  If not, see <http://www.gnu.org/licenses/>.
 */
 
 #![allow(unused)]
-#![no_std] // https://doc.rust-lang.org/nightly/core/
+#![no_std]
 #![feature(lang_items)]
-
-use core::panic::PanicInfo;
-
-#[no_mangle]
-#[lang = "eh_personality"]
-pub fn eh_personality() {}
 
 #[no_mangle]
 #[lang = "panic_impl"]
-pub fn panic_impl(pi: &PanicInfo) -> ! { loop {} }
+pub fn panic_impl(pi: &core::panic::PanicInfo) -> ! { loop {} }
 
 #[no_mangle]
 pub fn kernel_main() {
