@@ -17,6 +17,14 @@ along with rOSty.  If not, see <http://www.gnu.org/licenses/>.
 #![no_std]
 #![feature(lang_items)]
 
+type SystemArch = u32;
+type CharSize = u16;
+
+const MAX_CHARS: u32 = 80;
+const MAX_LINES: u32 = 3;
+const UMAX_CHARS: usize = MAX_CHARS as usize;
+const UMAX_LINES: usize = MAX_LINES as usize;
+
 pub enum VgaColor 
 {
     Black,
@@ -37,16 +45,19 @@ pub enum VgaColor
     White,
 }
 
-// les pointeurs vers la sortie VGA doivent être u32 cars nous utilisons un système 32bit !
 pub struct Writer
-{
-	video_output: u32,
-	character_index: u32
+{			
+	video_output: SystemArch,							
+	character_index: SystemArch,						
+	buffer: [ [ CharSize; UMAX_CHARS ] ; UMAX_LINES ],
+	buffer_line_index: SystemArch,		
+	buffer_char_index: SystemArch,
+	start_print_index: SystemArch	
 }
 
 impl Writer
 {
-	fn vga_color_to_u8(&self, color: &VgaColor) -> u16
+	fn vga_color_to_u8(&self, color: &VgaColor) -> CharSize
 	{
 		match *color 
 		{
@@ -69,66 +80,141 @@ impl Writer
 		}
 	}
 
+	fn clear_line_buffer(&mut self, line_index: usize)
+	{
+		for char_index in 0..MAX_CHARS
+		{
+			self.buffer[ line_index ][ (char_index as usize) ] = (0xF00 | (' ' as CharSize)) ;
+		}
+	}
+
+	fn clear_buffer(&mut self)
+	{
+		for line in 0..MAX_LINES
+		{
+			self.clear_line_buffer(line as usize);
+		}
+
+		self.buffer_line_index = 0;
+		self.buffer_char_index = 0;
+	}
+
 	fn clear_screen(&mut self)
 	{
 		self.character_index = 0;
 
-		for character_index in 0..(80 * 25)
+		for index in 0..(MAX_CHARS * MAX_LINES)
 		{
-			let mut character_to_print =  0xF00 | (' ' as u16);
-			unsafe { *((self.video_output + self.character_index * 2) as *mut u16) = character_to_print; }
+			let mut character_to_print =  0xF00 | (' ' as CharSize);
 
-			self.character_index += 1;
+			unsafe { *((self.video_output + index * 2) as *mut CharSize) = character_to_print; }
 		}
-
-		self.character_index = 0;
 	}
 
-	fn print_to_screen(&mut self, text: &str, color: VgaColor, new_line: bool)
+	fn push_to_buffer(&mut self, text: &str, color: VgaColor, new_line: bool)
 	{
-		// On vérifi si on est sur la dernière ligne
-		if self.character_index > ((80 * 24) + 1)
-			{ self.clear_screen(); }
-
-		for character in text.bytes()
+		for byte in text.bytes()
 		{
-			let mut character_to_print =  self.vga_color_to_u8(&color) | (character as u16);
+			unsafe 
+			{ 	
+				if self.buffer_char_index >= MAX_CHARS
+				{
+					self.buffer_char_index = 0;
 
-			unsafe { *((self.video_output + self.character_index * 2) as *mut u16) = character_to_print; }
+					if self.buffer_line_index < (MAX_LINES -1)
+					{ 
+						self.buffer_line_index += 1; 
+					}
+					else 
+					{
+						self.buffer_line_index = 0; 
 
-			self.character_index += 1;
+						if self.start_print_index < (MAX_LINES -1)
+						{							
+							self.start_print_index += 1;
+						}
+						else
+						{
+							self.start_print_index = 0;							
+						}
+					}
+
+					let line_index = self.buffer_line_index as usize;
+					self.clear_line_buffer(line_index);
+				}
+
+				let mut character_to_print = self.vga_color_to_u8(&color) | ( byte as CharSize);
+				self.buffer[self.buffer_line_index as usize][self.buffer_char_index as usize] = character_to_print;	
+
+				self.buffer_char_index += 1;				
+			}	
 		}
-
-		// fin de l'impression à l'écran
 
 		if new_line
 		{
-			let index_to_go = (79 - (self.character_index % 80)) + self.character_index;
-
-			while self.character_index <= index_to_go
+			for diff_index in self.buffer_char_index..MAX_CHARS
 			{
-				let mut character_to_print =  self.vga_color_to_u8(&color)  | (' ' as u16);
-				unsafe { *((self.video_output + self.character_index * 2) as *mut u16) = character_to_print; }
+				let mut character_to_print = self.vga_color_to_u8(&color) | ( ' ' as CharSize);
+
+				self.buffer[self.buffer_line_index as usize][self.buffer_char_index as usize] = character_to_print;	
+				self.buffer_char_index += 1; 
+			}
+
+			self.buffer_char_index = 0;
+
+			if self.buffer_line_index < (MAX_LINES -1)
+			{ 
+				self.buffer_line_index += 1; 
+				self.start_print_index += 1;
+			}
+			else 
+			{ 
+				self.buffer_line_index = 0; 
+				self.start_print_index = 0;
+			}
+		}
+	}
+
+	fn print_to_screen(&mut self)
+	{
+		self.clear_screen();
+
+		for line in self.start_print_index..MAX_LINES
+		{
+			for character in self.buffer[line as usize].iter()
+			{
+				unsafe { *((self.video_output + self.character_index * 2) as *mut CharSize) = *character; }
 
 				self.character_index += 1;
 			}
 		}
-		
+
+		for line in 0..self.start_print_index 
+		{
+			for character in self.buffer[line as usize].iter()
+			{
+				unsafe { *((self.video_output + self.character_index * 2) as *mut CharSize) = *character; }
+
+				self.character_index += 1;
+			}
+		}		
 	}
 
-	pub fn print_std(&mut self, text: &str){ self.print_to_screen(text, VgaColor::White, false); }
-	pub fn print_info(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Blue, false); }
-	pub fn print_debug(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Green, false); }
-	pub fn print_warning(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Yellow, false); }
-	pub fn print_error(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Red, false); }
-	pub fn print_custom_color(&mut self, text: &str, color: VgaColor){ self.print_to_screen(text, color, false); }
+	pub fn print_std(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::White, false); self.print_to_screen(); }
+	pub fn print_info(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Blue, false); self.print_to_screen(); }
+	pub fn print_debug(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Green, false); self.print_to_screen(); }
+	pub fn print_warning(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Yellow, false); self.print_to_screen(); }
+	pub fn print_error(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Red, false); self.print_to_screen(); }
+	pub fn print_custom_color(&mut self, text: &str, color: VgaColor){ self.push_to_buffer(text, color, false); self.print_to_screen(); }
 
-	pub fn print_ln_std(&mut self, text: &str){ self.print_to_screen(text, VgaColor::White, true); }
-	pub fn print_ln_info(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Blue, true); }
-	pub fn print_ln_debug(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Green, true); }
-	pub fn print_ln_warning(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Yellow, true); }
-	pub fn print_ln_error(&mut self, text: &str){ self.print_to_screen(text, VgaColor::Red, true); }
-	pub fn print_ln_custom_color(&mut self, text: &str, color: VgaColor){ self.print_to_screen(text, color, true); }
+	pub fn print_ln_std(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::White, true); self.print_to_screen(); }
+	pub fn print_ln_info(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Blue, true); self.print_to_screen(); }
+	pub fn print_ln_debug(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Green, true); self.print_to_screen(); }
+	pub fn print_ln_warning(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Yellow, true); self.print_to_screen(); }
+	pub fn print_ln_error(&mut self, text: &str){ self.push_to_buffer(text, VgaColor::Red, true); self.print_to_screen(); }
+	pub fn print_ln_custom_color(&mut self, text: &str, color: VgaColor){ self.push_to_buffer(text, color, true); self.print_to_screen(); }
+
+	pub fn clear(&mut self){ self.clear_buffer(); self.print_to_screen(); }
 
 	pub fn new() -> Self
 	{
@@ -136,6 +222,10 @@ impl Writer
 		{
 			video_output: 0xb8000,
 			character_index: 0,
+			buffer: [ [ (0xF00 | (' ' as CharSize)) ; UMAX_CHARS]; UMAX_LINES],
+			buffer_line_index: 0,
+			buffer_char_index: 0,
+			start_print_index: 0
 		}
 	}
 }
